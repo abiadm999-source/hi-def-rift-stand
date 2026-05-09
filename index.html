@@ -177,8 +177,9 @@ const CFG = {
   bossFlameRange: 15.5, bossFlameWidth: .76, bossFlameDamage: 18, bossFlameCD: 3.2, bossFlameWarn: .9, bossFlameBurst: 1.15,
   gateOpenTime: 3.4, spawnStagger: .42, powerupFloatY: 1.18, bombRadius: 12,
   weaponDuration: 45, crossbowCD: .72, arrowSpeed: 30, arrowLife: 1.6, arrowBlastRadius: 4.2, arrowDamage: 95,
-  swordCD: .34, swordRange: 4.4, swordDamage: 105,
-  powerupMin: 12, powerupMax: 18, rapidDuration: 7, shieldDuration: 6
+  swordCD: .34, swordRange: 5.15, swordDamage: 105,
+  flamethrowerDPS: 20, flamethrowerRange: 8.6, flamethrowerWidth: .52, flamethrowerEmitRate: 34,
+  powerupMin: 12, powerupMax: 18, rapidDuration: 7, shieldDuration: 20
 };
 
 const ITEM_INFO = {
@@ -187,7 +188,8 @@ const ITEM_INFO = {
   bomb: { label:"BOMB", short:"BOMB", color:0xff8a2f, tone:"bomb" },
   shield: { label:"SHIELD", short:"SHIELD", color:0x78f4ff, tone:"shield" },
   crossbow: { label:"CROSSBOW", short:"BOW", color:0xffd36b, tone:"crossbow" },
-  sword: { label:"ENERGY SWORD", short:"SWORD", color:0xbff8ff, tone:"sword" }
+  sword: { label:"ENERGY SWORD", short:"SWORD", color:0xbff8ff, tone:"sword" },
+  flamethrower: { label:"FLAMETHROWER", short:"FLAME", color:0xff7a22, tone:"bomb" }
 };
 
 const canvas = document.getElementById("game");
@@ -1555,7 +1557,7 @@ function applyHiDefZombieVisual(root, type=root.userData?.type || "zombie") {
   return true;
 }
 function powerupSpriteRegion(type) {
-  if (type === "crossbow" || type === "sword") return "weapon";
+  if (type === "crossbow" || type === "sword" || type === "flamethrower") return "weapon";
   if (type === "rapid") return "effectB";
   if (type === "bomb") return "effectC";
   if (type === "shield") return "effectD";
@@ -1563,7 +1565,7 @@ function powerupSpriteRegion(type) {
 }
 function applyHiDefPowerupVisual(group, type=group.userData?.type || "med") {
   if (!HI_DEF_SPRITES.enabled || !hiDefAtlas.ready || group.userData.hiDefSprite) return false;
-  const isWeapon = type === "crossbow" || type === "sword";
+  const isWeapon = type === "crossbow" || type === "sword" || type === "flamethrower";
   const sprite = makeHiDefSprite(powerupSpriteRegion(type), isWeapon ? 1.05 : 1.1, { centerY: .5, y: isWeapon ? .68 : .58 });
   if (!sprite) return false;
   sprite.material.opacity = isWeapon ? .95 : .82;
@@ -2292,6 +2294,7 @@ function limb(root,x,y,z,skin,outfit,r,h) {
 function makeHeldWeapon(type="raygun") {
   if (type === "crossbow") return makeCrossbow();
   if (type === "sword") return makeSword();
+  if (type === "flamethrower") return makeFlamethrower();
   return makeGun();
 }
 function makeGun() {
@@ -2324,11 +2327,41 @@ function makeCrossbow() {
 }
 function makeSword() {
   const g = new THREE.Group();
-  const blade = box(1.65,.12,.08,0xe7fbff); blade.position.x=.66; blade.material=glowMat(0xbff8ff,.45); g.add(blade);
-  const tip = cone(.11,.34,0xe7fbff,12); tip.rotation.z=-Math.PI/2; tip.position.x=1.58; tip.material=glowMat(0xe7fbff,.5); g.add(tip);
+  const blade = box(1.98,.12,.08,0xe7fbff); blade.position.x=.82; blade.material=glowMat(0xbff8ff,.45); g.add(blade);
+  const tip = cone(.11,.34,0xe7fbff,12); tip.rotation.z=-Math.PI/2; tip.position.x=1.88; tip.material=glowMat(0xe7fbff,.5); g.add(tip);
   const guard = box(.16,.72,.12,0xffd36b); guard.position.x=-.18; guard.material=shiny(0xffd36b,.25,.75); g.add(guard);
   const grip = cyl(.1,.45,0x171717,12); grip.rotation.z=Math.PI/2; grip.position.x=-.45; grip.material=mat(0x171717,.56,.2); g.add(grip);
   const glow = new THREE.PointLight(0xbff8ff, .55, 4); glow.position.x=.8; g.add(glow);
+  return g;
+}
+function makeFlamethrower() {
+  const g = new THREE.Group();
+  const tank = cyl(.28,.82,0x5f1e14,18);
+  tank.rotation.z = Math.PI / 2;
+  tank.position.set(-.28,.06,0);
+  tank.material = shiny(0x5f1e14,.42,.45);
+  g.add(tank);
+  const body = box(1.35,.42,.34,0x252019);
+  body.position.x = .18;
+  body.material = shiny(0x252019,.34,.48);
+  g.add(body);
+  const grip = box(.24,.68,.22,0x16110f);
+  grip.position.set(-.18,-.44,0);
+  grip.rotation.z = -.18;
+  grip.material = shiny(0x16110f,.36,.34);
+  g.add(grip);
+  const nozzle = cyl(.15,.92,0xffa23a,18);
+  nozzle.rotation.z = Math.PI / 2;
+  nozzle.position.x = .98;
+  nozzle.material = glowMat(0xff7a22,.45);
+  g.add(nozzle);
+  const pilot = sphere(.13,0xffd26a,12);
+  pilot.position.set(1.5,.02,0);
+  pilot.material = glowMat(0xffb72c,.9);
+  g.add(pilot);
+  const light = new THREE.PointLight(0xff7a22, .9, 5.2);
+  light.position.x = 1.3;
+  g.add(light);
   return g;
 }
 function makeAimIndicator() {
@@ -2385,6 +2418,7 @@ function setPlayerWeapon(player, type, now) {
   u.weapon = type;
   u.weaponUntil = type === "raygun" ? 0 : now + CFG.weaponDuration;
   u.lastShot = now - 1;
+  u.flameEmit = 0;
   hideHiDefProceduralModel(player);
 }
 
@@ -2873,6 +2907,10 @@ function updatePlayers(dt, now) {
     animateHumanoid(p, u.walk, u.moving, u.recoil, now);
     if (u.parts?.shield) u.parts.shield.visible = now < u.shieldUntil;
     updateAimIndicator(p);
+    if (firing && u.weapon === "flamethrower") {
+      applyFlamethrower(p, dt, now);
+      return;
+    }
     const cd = u.weapon === "sword" ? CFG.swordCD : u.weapon === "crossbow" ? CFG.crossbowCD : now < u.rapidUntil ? CFG.shootCD * .62 : CFG.shootCD;
     if (firing && now-u.lastShot > cd) shoot(p, now);
   });
@@ -3246,6 +3284,9 @@ function shoot(p, now) {
   const u = p.userData; u.lastShot = now; u.recoil = 1;
   const f = manualAimDirection(p);
   faceDirection(p, f);
+  if (u.weapon === "flamethrower") {
+    return;
+  }
   if (u.weapon === "sword") {
     swordSlash(p, now);
     return;
@@ -3288,6 +3329,77 @@ function shootCrossbow(p) {
   arrow.userData = { type:"arrow", vel:f.multiplyScalar(CFG.arrowSpeed), life:CFG.arrowLife, maxLife:CFG.arrowLife, baseY:pos.y, impacted:false };
   const light = new THREE.PointLight(0xffd36b, .9, 5); arrow.add(light);
   scene.add(arrow); bullets.push(arrow);
+}
+function applyFlamethrower(p, dt, now) {
+  const u = p.userData;
+  const f = manualAimDirection(p);
+  if (!finiteVector3(f) || f.lengthSq() < .001) return;
+  f.y = 0;
+  f.normalize();
+  faceDirection(p, f);
+  u.lastShot = now;
+  u.recoil = Math.max(u.recoil, .22);
+  u.flameEmit = (u.flameEmit || 0) + dt * CFG.flamethrowerEmitRate;
+  while (u.flameEmit >= 1) {
+    spawnPlayerFlameParticle(p, f);
+    u.flameEmit -= 1;
+  }
+  const origin = p.position.clone();
+  const flameStart = origin.clone().addScaledVector(f, .95);
+  zombies.forEach(z => {
+    const zu = z.userData;
+    if (zu.dead) return;
+    const flat = z.position.clone().sub(flameStart);
+    flat.y = 0;
+    const dist = flat.length();
+    if (dist < .01 || dist > CFG.flamethrowerRange) return;
+    const dir = flat.clone().normalize();
+    const angle = Math.acos(THREE.MathUtils.clamp(dir.dot(f), -1, 1));
+    if (angle > CFG.flamethrowerWidth) return;
+    if (dist > 2.2 && segmentHitsWall(flameStart, z.position, .25)) return;
+    const heat = 1 - dist / CFG.flamethrowerRange;
+    zu.hp -= CFG.flamethrowerDPS * dt * (.7 + heat * .3);
+    zu.recoil = Math.max(zu.recoil, .28);
+    zu.stun = Math.max(zu.stun, .08);
+    if (Math.random() < dt * 5) spawnBurnSpark(z.position.clone().add(new THREE.Vector3(0,2.0,0)));
+    if (zu.hp <= 0) killZombie(z);
+  });
+}
+function spawnPlayerFlameParticle(p, f) {
+  const side = new THREE.Vector3(f.z, 0, -f.x).normalize();
+  const yaw = rand(-CFG.flamethrowerWidth, CFG.flamethrowerWidth) * .9;
+  const dir = f.clone().applyAxisAngle(new THREE.Vector3(0,1,0), yaw).normalize();
+  const colorRoll = Math.random();
+  const color = colorRoll < .25 ? 0xffffc4 : colorRoll < .68 ? 0xff9d2e : 0xff4224;
+  const flame = sphere(rand(.12,.29), color, 12);
+  flame.material = new THREE.MeshBasicMaterial({ color, transparent:true, opacity:.92, depthWrite:false });
+  flame.position.copy(p.position)
+    .add(new THREE.Vector3(0,2.55,0))
+    .addScaledVector(f,1.55)
+    .addScaledVector(side, rand(-.18,.18));
+  const life = rand(.28,.48);
+  flame.userData = {
+    vel: dir.multiplyScalar(rand(10,17)).add(new THREE.Vector3(0, rand(-.28,.2), 0)),
+    life, maxLife: life
+  };
+  scene.add(flame);
+  flames.push(flame);
+  if (flames.length > 190) {
+    const old = flames.shift();
+    scene.remove(old);
+  }
+}
+function spawnBurnSpark(pos) {
+  const spark = sphere(rand(.05,.12), Math.random() < .5 ? 0xfff08a : 0xff5a1d, 8);
+  spark.material = new THREE.MeshBasicMaterial({ color:spark.material.color, transparent:true, opacity:.82, depthWrite:false });
+  const life = rand(.18,.3);
+  spark.userData = {
+    vel:new THREE.Vector3(rand(-1.6,1.6), rand(1.4,3.2), rand(-1.6,1.6)),
+    life, maxLife:life
+  };
+  spark.position.copy(pos);
+  scene.add(spark);
+  flames.push(spark);
 }
 function swordSlash(p, now) {
   const u = p.userData;
@@ -4024,6 +4136,12 @@ function makePowerup(type, x, z) {
     model.position.y = .76;
     model.rotation.z = -.75;
     group.add(model);
+  } else if (type === "flamethrower") {
+    const model = makeFlamethrower();
+    model.scale.setScalar(.94);
+    model.position.y = .76;
+    model.rotation.y = Math.PI / 2;
+    group.add(model);
   }
   applyHiDefPowerupVisual(group, type);
   const light = new THREE.PointLight(color, 1.45, 11);
@@ -4034,11 +4152,11 @@ function makePowerup(type, x, z) {
 }
 function maybeDropPowerup(pos, chance=.18) {
   if (Math.random() > chance || circleHitsWall(pos.x, pos.z, 1.2)) return;
-  const types = ["med","rapid","bomb","shield","crossbow","sword"];
+  const types = ["med","rapid","bomb","shield","crossbow","sword","flamethrower"];
   makePowerup(types[Math.floor(rand(0, types.length))], pos.x, pos.z);
 }
 function spawnPowerup() {
-  const types = ["med","rapid","bomb","shield","crossbow","sword"];
+  const types = ["med","rapid","bomb","shield","crossbow","sword","flamethrower"];
   for (let i=0;i<40;i++) {
     const x = rand(-36,36), z = rand(-26,26);
     if (!circleHitsWall(x, z, 1.2)) {
@@ -4078,7 +4196,7 @@ function showPickupNotification(player, type) {
   const who = `P${player.userData.idx + 1}`;
   let main = `${who} PICKED UP ${info.label}`;
   let sub = "";
-  if (type === "crossbow" || type === "sword") {
+  if (type === "crossbow" || type === "sword" || type === "flamethrower") {
     main = `${who} ACQUIRED ${info.label}`;
     sub = "45 seconds";
   } else if (type === "rapid") {
@@ -4098,7 +4216,7 @@ function applyPowerup(player, type, now) {
   if (type === "med") u.hp = Math.min(CFG.playerHP, u.hp + 42);
   if (type === "rapid") u.rapidUntil = now + CFG.rapidDuration;
   if (type === "shield") u.shieldUntil = now + CFG.shieldDuration;
-  if (type === "crossbow" || type === "sword") setPlayerWeapon(player, type, now);
+  if (type === "crossbow" || type === "sword" || type === "flamethrower") setPlayerWeapon(player, type, now);
   if (type === "bomb") {
     const origin = player.position.clone();
     screenShake = Math.max(screenShake, .65);
