@@ -176,9 +176,9 @@ const CFG = {
   contactDamageCD: .82, playerIFrame: .58,
   bossFlameRange: 15.5, bossFlameWidth: .76, bossFlameDamage: 18, bossFlameCD: 3.2, bossFlameWarn: .9, bossFlameBurst: 1.15,
   gateOpenTime: 3.4, spawnStagger: .42, powerupFloatY: 1.18, bombRadius: 12,
-  weaponDuration: 45, crossbowCD: .72, arrowSpeed: 30, arrowLife: 1.6, arrowBlastRadius: 4.2, arrowDamage: 95,
+  weaponDuration: 45, swordDuration: 30, crossbowCD: .72, arrowSpeed: 30, arrowLife: 1.6, arrowBlastRadius: 4.2, arrowDamage: 95,
   swordCD: .34, swordRange: 5.15, swordDamage: 105,
-  flamethrowerDPS: 20, flamethrowerRange: 8.6, flamethrowerWidth: .52, flamethrowerEmitRate: 34,
+  flamethrowerDPS: 20, flamethrowerRange: 12.5, flamethrowerWidth: .58, flamethrowerEmitRate: 36,
   powerupMin: 12, powerupMax: 18, rapidDuration: 7, shieldDuration: 20
 };
 
@@ -241,7 +241,7 @@ const mobileInput = {
   movePointer: null, firePointer: null, x: 0, y: 0, mag: 0, fire: false,
   lastMoveDir: new THREE.Vector3(0, 0, -1)
 };
-const cameraRig = { pos: null, look: null, dt: 0 };
+const cameraRig = { pos: null, look: null, dt: 0, bossFocus: null };
 const BASE_NAV_POINTS = [
   [-36,-26],[-18,-26],[0,-26],[18,-26],[36,-26],
   [-36,-9],[-18,-9],[0,-9],[18,-9],[36,-9],
@@ -1566,6 +1566,7 @@ function powerupSpriteRegion(type) {
 function applyHiDefPowerupVisual(group, type=group.userData?.type || "med") {
   if (!HI_DEF_SPRITES.enabled || !hiDefAtlas.ready || group.userData.hiDefSprite) return false;
   const isWeapon = type === "crossbow" || type === "sword" || type === "flamethrower";
+  if (isWeapon) return false;
   const sprite = makeHiDefSprite(powerupSpriteRegion(type), isWeapon ? 1.05 : 1.1, { centerY: .5, y: isWeapon ? .68 : .58 });
   if (!sprite) return false;
   sprite.material.opacity = isWeapon ? .95 : .82;
@@ -2416,7 +2417,7 @@ function setPlayerWeapon(player, type, now) {
   player.add(weapon);
   parts.gun = weapon;
   u.weapon = type;
-  u.weaponUntil = type === "raygun" ? 0 : now + CFG.weaponDuration;
+  u.weaponUntil = type === "raygun" ? 0 : now + (type === "sword" ? CFG.swordDuration : CFG.weaponDuration);
   u.lastShot = now - 1;
   u.flameEmit = 0;
   hideHiDefProceduralModel(player);
@@ -2492,6 +2493,7 @@ function cleanupDynamic() {
   players=[]; zombies=[]; bullets=[]; impacts=[]; stunBursts=[]; powerups=[]; corpses=[]; flames=[]; spawnQueue=[];
   fadeTimer = 0;
   lastRaySplashVisual = -99;
+  cameraRig.bossFocus = null;
   if (fadeOverlay) fadeOverlay.style.opacity = "0";
   hideCenterMessage();
   resetKillstreak();
@@ -3377,9 +3379,9 @@ function spawnPlayerFlameParticle(p, f) {
     .add(new THREE.Vector3(0,2.55,0))
     .addScaledVector(f,1.55)
     .addScaledVector(side, rand(-.18,.18));
-  const life = rand(.28,.48);
+  const life = rand(.52,.78);
   flame.userData = {
-    vel: dir.multiplyScalar(rand(10,17)).add(new THREE.Vector3(0, rand(-.28,.2), 0)),
+    vel: dir.multiplyScalar(rand(14,22)).add(new THREE.Vector3(0, rand(-.28,.2), 0)),
     life, maxLife: life
   };
   scene.add(flame);
@@ -3475,8 +3477,22 @@ function updateZombies(dt, now) {
       validateZombieVisualState(z, "emerge", now);
       if (u.type === "boss" && u.emergeTime <= 0) {
         u.flameCD = Math.max(u.flameCD, 2.1);
-        showCenterMessage("BOSS ENTERED", "Keep moving before the flame warning.", "boss", 1.1);
+        showCenterMessage("BOSS ROAR", "Get ready.", "boss", 1.1);
       }
+      return;
+    }
+    if (u.type === "boss" && u.introTime > 0) {
+      const target = nearestPlayer(z.position);
+      if (target) faceDirection(z, aimFlat(z.position, target.position));
+      u.velocity.set(0,0,0);
+      const introMove = updateZombieAnimationState(z, frameStart, dt, now, false, false);
+      u.walk += dt * .9;
+      animateZombie(z, u.walk, introMove, u.recoil, false, now);
+      updateBossIntro(z, dt, now);
+      ensureAliveVisible(z);
+      updateBossHealthBar(z);
+      u.lastPos.copy(z.position);
+      validateZombieVisualState(z, "boss-intro", now);
       return;
     }
     const target = nearestPlayer(z.position); if (!target) return;
@@ -3636,9 +3652,11 @@ function updateEnemyHealthBars(camera) {
 }
 function startBossIntro(z, pos) {
   const u = z.userData;
-  u.introTime = 1.55;
-  u.introMax = 1.55;
-  u.flameCD = Math.max(u.flameCD, 2.4);
+  const introLength = (u.emergeTime || 0) + 2.35;
+  u.introTime = introLength;
+  u.introMax = introLength;
+  u.flameCD = Math.max(u.flameCD, 3.2);
+  cameraRig.bossFocus = z;
   const aura = new THREE.Group();
   aura.position.y = 2.25;
   const shell = new THREE.Mesh(
@@ -3696,6 +3714,7 @@ function updateBossIntro(z, dt, now) {
     p.lArm.rotation.z = .88;
     p.rArm.rotation.z = -.88;
   }
+  poseBossRoarRig(z, t, now);
   if (p.bossAura) {
     p.bossAura.visible = true;
     p.bossAura.rotation.y += dt * 3.2;
@@ -3709,6 +3728,24 @@ function updateBossIntro(z, dt, now) {
     z.remove(p.bossAura);
     p.bossAura = null;
   }
+  if (u.introTime <= 0 && cameraRig.bossFocus === z) cameraRig.bossFocus = null;
+}
+function poseBossRoarRig(z, t, now) {
+  const rig = z.userData?.parts?.walkRig;
+  if (!rig?.base) return;
+  const lift = Math.sin((1 - t) * Math.PI);
+  const hold = 1 - Math.abs(t - .48) * 1.85;
+  const roar = safeAnim(Math.max(lift, hold), 0, 1, 0);
+  const shake = Math.sin(now * 18) * .025 * roar;
+  poseWalkLimb(rig.chest, rig.base.chest, rig.base.chest.x, rig.base.chest.y + .08 * roar, rig.base.chest.z, rig.base.chest.rot - .16 * roar, .98);
+  poseWalkLimb(rig.head, rig.base.head, rig.base.head.x + shake, rig.base.head.y + .2 * roar, rig.base.head.z, rig.base.head.rot - .22 * roar, .98);
+  poseWalkLimb(rig.jaw, rig.base.jaw, rig.base.jaw.x + shake, rig.base.jaw.y + .18 * roar, rig.base.jaw.z, .16 * roar, .98);
+  poseWalkLimb(rig.lUpperArm, rig.base.lUpperArm, -.98, 3.04 + .18 * roar, rig.base.lUpperArm.z, -.72, .96);
+  poseWalkLimb(rig.rUpperArm, rig.base.rUpperArm, .98, 3.04 + .18 * roar, rig.base.rUpperArm.z, .72, .96);
+  poseWalkLimb(rig.lForeArm, rig.base.lForeArm, -.82, 3.62 + .25 * roar, rig.base.lForeArm.z, -.72, .98);
+  poseWalkLimb(rig.rForeArm, rig.base.rForeArm, .82, 3.62 + .25 * roar, rig.base.rForeArm.z, .72, .98);
+  poseWalkLimb(rig.lHand, rig.base.lHand, -.66, 4.02, rig.base.lHand.z, 0, .98);
+  poseWalkLimb(rig.rHand, rig.base.rHand, .66, 4.02, rig.base.rHand.z, 0, .98);
 }
 function placeBossWarningBeam(z) {
   const u = z.userData;
@@ -4198,7 +4235,7 @@ function showPickupNotification(player, type) {
   let sub = "";
   if (type === "crossbow" || type === "sword" || type === "flamethrower") {
     main = `${who} ACQUIRED ${info.label}`;
-    sub = "45 seconds";
+    sub = `${type === "sword" ? CFG.swordDuration : CFG.weaponDuration} seconds`;
   } else if (type === "rapid") {
     main = `${who} RAPID FIRE`;
     sub = `${CFG.rapidDuration} seconds`;
@@ -4345,6 +4382,27 @@ buildWorld();
 
 const cameras = [new THREE.PerspectiveCamera(66, 1, .1, 180), new THREE.PerspectiveCamera(66, 1, .1, 180)];
 function placeCamera(cam, p) {
+  const bossFocus = cameraRig.bossFocus;
+  if (bossFocus?.userData?.type === "boss" && bossFocus.userData.introTime > 0 && !bossFocus.userData.dead) {
+    const bossDir = forward(bossFocus);
+    const portrait = innerHeight >= innerWidth;
+    const desiredPos = bossFocus.position.clone()
+      .addScaledVector(bossDir, portrait ? 8.8 : 7.2)
+      .add(new THREE.Vector3(0, portrait ? 5.8 : 4.8, 0));
+    const desiredLook = bossFocus.position.clone().add(new THREE.Vector3(0, 2.9, 0));
+    if (!cameraRig.pos || !cameraRig.look) {
+      cameraRig.pos = desiredPos.clone();
+      cameraRig.look = desiredLook.clone();
+    } else {
+      const alpha = 1 - Math.exp(-cameraRig.dt * 5.2);
+      cameraRig.pos.lerp(desiredPos, alpha);
+      cameraRig.look.lerp(desiredLook, alpha);
+    }
+    cam.position.copy(cameraRig.pos);
+    cam.lookAt(cameraRig.look);
+    return;
+  }
+  if (bossFocus && (!bossFocus.userData || bossFocus.userData.introTime <= 0 || bossFocus.userData.dead)) cameraRig.bossFocus = null;
   const f = forward(p), side = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), f).normalize();
   const portrait = innerHeight >= innerWidth;
   const back = portrait ? -17 : -13;
