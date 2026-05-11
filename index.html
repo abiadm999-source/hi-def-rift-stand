@@ -18,14 +18,19 @@
     if (!r.ok) throw new Error("Could not load Rift Stand build");
     return r.text();
   });
+  const replace = (pattern, value, label) => {
+    const next = html.replace(pattern, value);
+    if (next === html) console.warn(`Rift Stand patch missed: ${label}`);
+    html = next;
+  };
 
-  html = html.replace(
-`  const shielded = now < u.shieldUntil;
-  u.hp -= damage * (shielded ? .35 : 1);
-  u.hurtUntil = now + Math.max(CFG.playerIFrame, CFG.contactDamageCD);
-  u.recoil = Math.max(u.recoil, .55);`,
-`  const shielded = now < u.shieldUntil;
-  if (shielded) {
+  replace(/function hurtPlayer\(player, damage, now, sourcePos, heavy=false\) \{[\s\S]*?\n\}\nfunction updateFlames\(dt\) \{/, `function hurtPlayer(player, damage, now, sourcePos, heavy=false) {
+  const u = player.userData;
+  if (u.down || u.hp <= 0 || now < u.hurtUntil) return;
+  if (now < u.shieldUntil) {
+    u.shieldHpFloor = Math.max(u.shieldHpFloor || 0, u.hp || 0);
+    u.hp = Math.max(u.hp, u.shieldHpFloor);
+    u.down = false;
     u.hurtUntil = now + Math.max(.18, CFG.contactDamageCD * .45);
     u.recoil = Math.max(u.recoil, .18);
     if (u.parts?.shield) {
@@ -39,56 +44,76 @@
   }
   u.hp -= damage;
   u.hurtUntil = now + Math.max(CFG.playerIFrame, CFG.contactDamageCD);
-  u.recoil = Math.max(u.recoil, .55);`
-  );
+  u.recoil = Math.max(u.recoil, .55);
+  if (sourcePos) {
+    const away = player.position.clone().sub(sourcePos); away.y = 0;
+    if (away.lengthSq() > .001) {
+      away.normalize();
+      moveWithCollisions(player, away.x * .38, away.z * .38, .72);
+    }
+  }
+  screenShake = Math.max(screenShake, heavy ? .55 : .24);
+  if (u.hp <= 0) {
+    u.hp = 0;
+    u.down = true;
+  }
+}
+function updateFlames(dt) {`, "shield hurt block");
 
-  html = html.replace(
-`    if (u.parts?.shield) u.parts.shield.visible = now < u.shieldUntil;`,
-`    if (u.parts?.shield) {
+  replace(`    const frameStart = p.position.clone();
+    if (u.down || u.hp <= 0) {`, `    const frameStart = p.position.clone();
+    if (now < u.shieldUntil) {
+      u.shieldHpFloor = Math.max(u.shieldHpFloor || 0, u.hp || 0);
+      u.hp = Math.max(u.hp, u.shieldHpFloor);
+      u.down = false;
+    } else if (u.shieldHpFloor) {
+      u.shieldHpFloor = 0;
+    }
+    if (u.down || u.hp <= 0) {`, "shield hp floor");
+
+  replace(`  if (type === "shield") u.shieldUntil = now + CFG.shieldDuration;`, `  if (type === "shield") {
+    u.shieldUntil = now + CFG.shieldDuration;
+    u.shieldHpFloor = Math.max(u.shieldHpFloor || 0, u.hp || 0);
+    u.hurtUntil = 0;
+  }`, "shield pickup floor");
+
+  replace(`    if (u.parts?.shield) u.parts.shield.visible = now < u.shieldUntil;`, `    if (u.parts?.shield) {
       u.parts.shield.visible = now < u.shieldUntil;
       u.parts.shield.scale.lerp(new THREE.Vector3(1,1,1), Math.min(1, dt * 5));
       u.parts.shield.traverse?.(o => {
         if (o.material && "opacity" in o.material) o.material.opacity += ((o.material.wireframe ? .18 : .18) - o.material.opacity) * Math.min(1, dt * 4);
       });
-    }`
-  );
+    }`, "shield pulse");
 
-  html = html.replace(
-`  group.scale.set(zombie ? (boss ? 1.12 : 1.1) : 1.15, zombie ? 1.02 : 1.03, 1);
+  replace(`  group.scale.set(zombie ? (boss ? 1.12 : 1.1) : 1.15, zombie ? 1.02 : 1.03, 1);
   const armColor = zombie ? (boss ? 0x9b7762 : kind === "runner" ? 0x85886c : 0x8e9672) : 0x1b3552;
   const forearmColor = zombie ? (boss ? 0xa68569 : kind === "runner" ? 0x9b8a78 : 0xa0a880) : 0x13263d;
   const handColor = zombie ? (boss ? 0xaa846b : 0xa8ad83) : 0xd08b5c;
   const legColor = zombie ? (boss ? 0x352d28 : 0x353831) : 0x0d1520;
   const bodyColor = zombie ? (boss ? 0x9a7460 : kind === "runner" ? 0x8d9271 : kind === "brute" ? 0x8f9470 : 0x929a74) : 0x203d5f;
-  const shirtColor = zombie ? (boss ? 0x4a372e : kind === "runner" ? 0x653c49 : kind === "brute" ? 0x524a3a : 0x4e5644) : 0xf0b531;`,
-`  group.scale.set(zombie ? (boss ? 1.18 : 1.16) : 1.22, zombie ? 1.05 : 1.06, 1);
+  const shirtColor = zombie ? (boss ? 0x4a372e : kind === "runner" ? 0x653c49 : kind === "brute" ? 0x524a3a : 0x4e5644) : 0xf0b531;`, `  group.scale.set(zombie ? (boss ? 1.18 : 1.16) : 1.22, zombie ? 1.05 : 1.06, 1);
   const armColor = zombie ? (boss ? 0xb48970 : kind === "runner" ? 0x9b9675 : 0xa3ad7b) : 0x244f78;
   const forearmColor = zombie ? (boss ? 0xc39a78 : kind === "runner" ? 0xac947d : 0xb5bb8a) : 0x1a395d;
   const handColor = zombie ? (boss ? 0xc79776 : 0xbec48f) : 0xd8925d;
   const legColor = zombie ? (boss ? 0x3f332b : 0x41443a) : 0x111d2a;
   const bodyColor = zombie ? (boss ? 0xb1866e : kind === "runner" ? 0x9da176 : kind === "brute" ? 0xa0a679 : 0xa6b07f) : 0x25537f;
-  const shirtColor = zombie ? (boss ? 0x5a4034 : kind === "runner" ? 0x744556 : kind === "brute" ? 0x625745 : 0x5a654c) : 0xf6bf35;`
-  );
+  const shirtColor = zombie ? (boss ? 0x5a4034 : kind === "runner" ? 0x744556 : kind === "brute" ? 0x625745 : 0x5a654c) : 0xf6bf35;`, "visual palette");
 
-  html = html.replace(
-`  const legH = boss ? 1.28 : zombie ? 1.16 : 1.26;
+  replace(`  const legH = boss ? 1.28 : zombie ? 1.16 : 1.26;
   const upperH = boss ? .8 : zombie ? .72 : .68;
   const foreH = boss ? .74 : zombie ? .7 : .64;
   const upperW = boss ? .44 : zombie ? .38 : .4;
   const foreW = boss ? .38 : zombie ? .34 : .34;
   const handSize = boss ? .48 : zombie ? .42 : .4;
-  const legW = boss ? .5 : zombie ? .43 : .48;`,
-`  const legH = boss ? 1.32 : zombie ? 1.2 : 1.28;
+  const legW = boss ? .5 : zombie ? .43 : .48;`, `  const legH = boss ? 1.32 : zombie ? 1.2 : 1.28;
   const upperH = boss ? .84 : zombie ? .76 : .7;
   const foreH = boss ? .78 : zombie ? .74 : .66;
   const upperW = boss ? .52 : zombie ? .46 : .46;
   const foreW = boss ? .46 : zombie ? .41 : .38;
   const handSize = boss ? .56 : zombie ? .48 : .43;
-  const legW = boss ? .58 : zombie ? .5 : .52;`
-  );
+  const legW = boss ? .58 : zombie ? .5 : .52;`, "chunkier limbs");
 
-  html = html.replace(
-`    rig.outline = makeWalkBodyPiece("playerTorso", 0x02070c, 2.02, 1.86, .7);
+  replace(`    rig.outline = makeWalkBodyPiece("playerTorso", 0x02070c, 2.02, 1.86, .7);
     rig.torso = makeWalkBodyPiece("playerTorso", 0x203d5f, 1.72, 1.7, .99);
     rig.chest = makeWalkBodyPiece("playerChest", 0xf0b531, 1.82, .84, .99);
     rig.rim = makeWalkBodyPiece("playerChest", 0x77f4ff, 1.86, .16, .86);
@@ -97,8 +122,7 @@
     rig.hair = makeWalkBodyPiece("playerHair", 0x110b08, .84, .42, .99);
     rig.crown = makeWalkBodyPiece("playerCrown", 0xffd34d, .66, .44, .99);
     rig.lBoot = makeWalkBodyPiece("playerBoot", 0x101922, .68, .44, .99);
-    rig.rBoot = makeWalkBodyPiece("playerBoot", 0x101922, .68, .44, .99);`,
-`    rig.outline = makeWalkBodyPiece("playerTorso", 0x02070c, 2.24, 1.96, .74);
+    rig.rBoot = makeWalkBodyPiece("playerBoot", 0x101922, .68, .44, .99);`, `    rig.outline = makeWalkBodyPiece("playerTorso", 0x02070c, 2.24, 1.96, .74);
     rig.torso = makeWalkBodyPiece("playerTorso", 0x25537f, 1.96, 1.78, .99);
     rig.chest = makeWalkBodyPiece("playerChest", 0xf6bf35, 2.02, .92, .99);
     rig.rim = makeWalkBodyPiece("playerChest", 0x77f4ff, 2.02, .18, .9);
@@ -107,8 +131,7 @@
     rig.hair = makeWalkBodyPiece("playerHair", 0x110b08, .9, .46, .99);
     rig.crown = makeWalkBodyPiece("playerCrown", 0xffd34d, .78, .28, .92);
     rig.lBoot = makeWalkBodyPiece("playerBoot", 0x101922, .76, .48, .99);
-    rig.rBoot = makeWalkBodyPiece("playerBoot", 0x101922, .76, .48, .99);`
-  );
+    rig.rBoot = makeWalkBodyPiece("playerBoot", 0x101922, .76, .48, .99);`, "chunkier player");
 
   document.open();
   document.write(html);
