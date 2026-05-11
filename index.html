@@ -110,17 +110,6 @@
     rig.rBoot = makeWalkBodyPiece("playerBoot", 0x101922, .76, .48, .99);`
   );
 
-  html = html.replace(
-`    rig.torso = makeWalkBodyPiece(\`${kind}Torso\`, bodyColor, boss ? 1.9 : 1.62, boss ? 1.96 : 1.74, .99);
-    rig.chest = makeWalkBodyPiece(\`${kind}Chest\`, shirtColor, boss ? 1.8 : 1.48, boss ? .9 : .8, .98);
-    rig.belt = makeWalkBodyPiece(\`${kind}Belt\`, shirtColor, boss ? 1.48 : 1.28, boss ? .38 : .34, .98);
-    rig.head = makeWalkBodyPiece(\`${kind}Head\`, bodyColor, boss ? .98 : .84, boss ? .96 : .84, .98);`,
-`    rig.torso = makeWalkBodyPiece(\`${kind}Torso\`, bodyColor, boss ? 2.08 : 1.82, boss ? 2.04 : 1.82, .99);
-    rig.chest = makeWalkBodyPiece(\`${kind}Chest\`, shirtColor, boss ? 1.98 : 1.66, boss ? .98 : .88, .98);
-    rig.belt = makeWalkBodyPiece(\`${kind}Belt\`, shirtColor, boss ? 1.6 : 1.38, boss ? .42 : .38, .98);
-    rig.head = makeWalkBodyPiece(\`${kind}Head\`, bodyColor, boss ? 1.08 : .92, boss ? 1.04 : .92, .98);`
-  );
-
   document.open();
   document.write(html);
   document.close();
