@@ -24,66 +24,7 @@
     html = next;
   };
 
-  replace(/function hurtPlayer\(player, damage, now, sourcePos, heavy=false\) \{[\s\S]*?\n\}\nfunction updateFlames\(dt\) \{/, `function hurtPlayer(player, damage, now, sourcePos, heavy=false) {
-  const u = player.userData;
-  if (u.down || u.hp <= 0 || now < u.hurtUntil) return;
-  if (now < u.shieldUntil) {
-    u.shieldHpFloor = Math.max(u.shieldHpFloor || 0, u.hp || 0);
-    u.hp = Math.max(u.hp, u.shieldHpFloor);
-    u.down = false;
-    u.hurtUntil = now + Math.max(.18, CFG.contactDamageCD * .45);
-    u.recoil = Math.max(u.recoil, .18);
-    if (u.parts?.shield) {
-      u.parts.shield.scale.setScalar(1.08);
-      u.parts.shield.traverse?.(o => {
-        if (o.material && "opacity" in o.material) o.material.opacity = Math.max(o.material.opacity, .28);
-      });
-    }
-    screenShake = Math.max(screenShake, .12);
-    return;
-  }
-  u.hp -= damage;
-  u.hurtUntil = now + Math.max(CFG.playerIFrame, CFG.contactDamageCD);
-  u.recoil = Math.max(u.recoil, .55);
-  if (sourcePos) {
-    const away = player.position.clone().sub(sourcePos); away.y = 0;
-    if (away.lengthSq() > .001) {
-      away.normalize();
-      moveWithCollisions(player, away.x * .38, away.z * .38, .72);
-    }
-  }
-  screenShake = Math.max(screenShake, heavy ? .55 : .24);
-  if (u.hp <= 0) {
-    u.hp = 0;
-    u.down = true;
-  }
-}
-function updateFlames(dt) {`, "shield hurt block");
-
-  replace(`    const frameStart = p.position.clone();
-    if (u.down || u.hp <= 0) {`, `    const frameStart = p.position.clone();
-    if (now < u.shieldUntil) {
-      u.shieldHpFloor = Math.max(u.shieldHpFloor || 0, u.hp || 0);
-      u.hp = Math.max(u.hp, u.shieldHpFloor);
-      u.down = false;
-    } else if (u.shieldHpFloor) {
-      u.shieldHpFloor = 0;
-    }
-    if (u.down || u.hp <= 0) {`, "shield hp floor");
-
-  replace(`  if (type === "shield") u.shieldUntil = now + CFG.shieldDuration;`, `  if (type === "shield") {
-    u.shieldUntil = now + CFG.shieldDuration;
-    u.shieldHpFloor = Math.max(u.shieldHpFloor || 0, u.hp || 0);
-    u.hurtUntil = 0;
-  }`, "shield pickup floor");
-
-  replace(`    if (u.parts?.shield) u.parts.shield.visible = now < u.shieldUntil;`, `    if (u.parts?.shield) {
-      u.parts.shield.visible = now < u.shieldUntil;
-      u.parts.shield.scale.lerp(new THREE.Vector3(1,1,1), Math.min(1, dt * 5));
-      u.parts.shield.traverse?.(o => {
-        if (o.material && "opacity" in o.material) o.material.opacity += ((o.material.wireframe ? .18 : .18) - o.material.opacity) * Math.min(1, dt * 4);
-      });
-    }`, "shield pulse");
+  replace(/shieldDuration:\s*\d+/, "shieldDuration: 20", "shield duration");
 
   replace(`  group.scale.set(zombie ? (boss ? 1.12 : 1.1) : 1.15, zombie ? 1.02 : 1.03, 1);
   const armColor = zombie ? (boss ? 0x9b7762 : kind === "runner" ? 0x85886c : 0x8e9672) : 0x1b3552;
