@@ -25,6 +25,8 @@
   };
 
   replace(/shieldDuration:\s*\d+/, "shieldDuration: 20", "shield duration");
+  html = html.replaceAll('["med","rapid","bomb","shield","crossbow","sword","flamethrower"]', '["med","rapid","bomb","crossbow","sword","flamethrower"]');
+  html = html.replaceAll('["med","rapid","bomb","shield","crossbow","sword"]', '["med","rapid","bomb","crossbow","sword"]');
 
   replace(`  group.scale.set(zombie ? (boss ? 1.12 : 1.1) : 1.15, zombie ? 1.02 : 1.03, 1);
   const armColor = zombie ? (boss ? 0x9b7762 : kind === "runner" ? 0x85886c : 0x8e9672) : 0x1b3552;
